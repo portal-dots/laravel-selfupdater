@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 return [
 
     /*
@@ -32,26 +34,41 @@ return [
     | A repository can be of different types, which can be specified here.
     | Current options:
     | - github
+    | - gitlab
     | - http
     |
     */
 
     'repository_types' => [
         'github' => [
-            'type' => 'github',
-            'repository_vendor' => env('SELF_UPDATER_REPO_VENDOR', ''),
-            'repository_name' => env('SELF_UPDATER_REPO_NAME', ''),
-            'repository_url' => '',
-            'download_path' => env('SELF_UPDATER_DOWNLOAD_PATH', '/tmp'),
+            'type'                 => 'github',
+            'repository_vendor'    => env('SELF_UPDATER_REPO_VENDOR', ''),
+            'repository_name'      => env('SELF_UPDATER_REPO_NAME', ''),
+            'repository_url'       => '',
+            'download_path'        => env('SELF_UPDATER_DOWNLOAD_PATH', '/tmp'),
             'private_access_token' => env('SELF_UPDATER_GITHUB_PRIVATE_ACCESS_TOKEN', ''),
-            'use_branch' => env('SELF_UPDATER_USE_BRANCH', ''),
+            'use_branch'           => env('SELF_UPDATER_USE_BRANCH', ''),
+        ],
+        'gitlab' => [
+            'type'                 => 'gitlab',
+            'repository_id'        => env('SELF_UPDATER_REPO_URL', ''),
+            'download_path'        => env('SELF_UPDATER_DOWNLOAD_PATH', '/tmp'),
+            'private_access_token' => env('SELF_UPDATER_GITLAB_PRIVATE_ACCESS_TOKEN', ''),
         ],
         'http' => [
-            'type' => 'http',
-            'repository_url' => env('SELF_UPDATER_REPO_URL', ''),
-            'pkg_filename_format' => env('SELF_UPDATER_PKG_FILENAME_FORMAT', 'v_VERSION_'),
-            'download_path' => env('SELF_UPDATER_DOWNLOAD_PATH', '/tmp'),
+            'type'                 => 'http',
+            'repository_url'       => env('SELF_UPDATER_REPO_URL', ''),
+            'pkg_filename_format'  => env('SELF_UPDATER_PKG_FILENAME_FORMAT', 'v_VERSION_'),
+            'download_path'        => env('SELF_UPDATER_DOWNLOAD_PATH', '/tmp'),
             'private_access_token' => env('SELF_UPDATER_HTTP_PRIVATE_ACCESS_TOKEN', ''),
+        ],
+        'gitea' => [
+            'type'                 => 'gitea',
+            'repository_vendor'    => env('SELF_UPDATER_REPO_VENDOR', ''),
+            'gitea_url'            => env('SELF_UPDATER_GITEA_URL', ''),
+            'repository_name'      => env('SELF_UPDATER_REPO_NAME', ''),
+            'download_path'        => env('SELF_UPDATER_DOWNLOAD_PATH', '/tmp'),
+            'private_access_token' => env('SELF_UPDATER_GITEA_PRIVATE_ACCESS_TOKEN', ''),
         ],
     ],
 
@@ -102,7 +119,7 @@ return [
     'notifications' => [
         'notifications' => [
             \Codedge\Updater\Notifications\Notifications\UpdateSucceeded::class => ['mail'],
-            \Codedge\Updater\Notifications\Notifications\UpdateFailed::class => ['mail'],
+            \Codedge\Updater\Notifications\Notifications\UpdateFailed::class    => ['mail'],
             \Codedge\Updater\Notifications\Notifications\UpdateAvailable::class => ['mail'],
         ],
 
@@ -115,12 +132,12 @@ return [
         'mail' => [
             'to' => [
                 'address' => env('SELF_UPDATER_MAILTO_ADDRESS', 'notifications@example.com'),
-                'name' => env('SELF_UPDATER_MAILTO_NAME', ''),
+                'name'    => env('SELF_UPDATER_MAILTO_NAME', ''),
             ],
 
             'from' => [
                 'address' => env('SELF_UPDATER_MAIL_FROM_ADDRESS', 'updater@example.com'),
-                'name' => env('SELF_UPDATER_MAIL_FROM_NAME', 'Update'),
+                'name'    => env('SELF_UPDATER_MAIL_FROM_NAME', 'Update'),
             ],
         ],
     ],

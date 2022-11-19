@@ -8,15 +8,10 @@ use Illuminate\Support\Facades\Storage;
 
 trait UseVersionFile
 {
-    /**
-     * @var string
-     */
-    protected $versionFile = 'self-updater-new-version';
+    protected string $versionFile = 'self-updater-new-version';
 
     /**
      * Check if the file with the new version already exists.
-     *
-     * @return bool
      */
     public function versionFileExists(): bool
     {
@@ -25,9 +20,6 @@ trait UseVersionFile
 
     /**
      * Write the version file.
-     *
-     * @param $content
-     * @return bool
      */
     public function setVersionFile(string $content): bool
     {
@@ -36,8 +28,6 @@ trait UseVersionFile
 
     /**
      * Get the content of the version file.
-     *
-     * @return string
      */
     public function getVersionFile(): string
     {
@@ -46,8 +36,6 @@ trait UseVersionFile
 
     /**
      * Delete the version file.
-     *
-     * @return bool
      */
     public function deleteVersionFile(): bool
     {

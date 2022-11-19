@@ -14,15 +14,14 @@ use Illuminate\Notifications\Notification;
 
 final class EventHandler
 {
-    /** @var Repository */
-    protected $config;
+    protected Repository $config;
 
     public function __construct(Repository $config)
     {
         $this->config = $config;
     }
 
-    public function subscribe(Dispatcher $events)
+    public function subscribe(Dispatcher $events): void
     {
         $events->listen($this->allEventClasses(), function ($event) {
             $notification = $this->determineNotification($event);
@@ -50,7 +49,7 @@ final class EventHandler
                 return $notificationName === $eventName;
             });
 
-        if (! $notificationClass) {
+        if (!$notificationClass) {
             throw new Exception('Notification could not be sent.');
         }
 

@@ -6,13 +6,13 @@ namespace Codedge\Updater\Tests;
 
 use Codedge\Updater\SourceRepository;
 use Codedge\Updater\UpdaterManager;
-use GuzzleHttp\Client;
+use Illuminate\Support\Facades\Http;
 use InvalidArgumentException;
 
-class UpdaterManagerTest extends Testcase
+class UpdaterManagerTest extends TestCase
 {
     /** @test */
-    public function it_can_be_instantiated()
+    public function it_can_be_instantiated(): void
     {
         $manager = resolve(UpdaterManager::class);
 
@@ -20,7 +20,7 @@ class UpdaterManagerTest extends Testcase
     }
 
     /** @test */
-    public function it_can_get_source_repository_with_default_name()
+    public function it_can_get_source_repository_with_default_name(): void
     {
         $manager = resolve(UpdaterManager::class);
         $result = $manager->source();
@@ -29,7 +29,7 @@ class UpdaterManagerTest extends Testcase
     }
 
     /** @test */
-    public function it_can_get_source_repository_with_name_github()
+    public function it_can_get_source_repository_with_name_github(): void
     {
         $manager = resolve(UpdaterManager::class);
         $result = $manager->source('github');
@@ -38,7 +38,7 @@ class UpdaterManagerTest extends Testcase
     }
 
     /** @test */
-    public function it_can_get_source_repository_with_name_http()
+    public function it_can_get_source_repository_with_name_http(): void
     {
         $manager = resolve(UpdaterManager::class);
         $result = $manager->source('http');
@@ -47,7 +47,7 @@ class UpdaterManagerTest extends Testcase
     }
 
     /** @test */
-    public function it_can_get_source_repository_with_not_existing_name()
+    public function it_can_get_source_repository_with_not_existing_name(): void
     {
         $manager = resolve(UpdaterManager::class);
 
@@ -58,18 +58,16 @@ class UpdaterManagerTest extends Testcase
     /** @test */
     public function it_can_get_new_version_through_updater_manager_available_from_type_tag_without_version_file(): void
     {
-        $client = $this->getMockedClient([
-            $this->getResponse200Type('tag'),
-            $this->getResponse200Type('tag'),
-        ]);
-        $this->app->instance(Client::class, $client);
-
         /** @var UpdaterManager $manager */
         $manager = resolve(UpdaterManager::class);
 
         /** @var SourceRepository $repository */
-        $repository = $manager->source('');
+        $repository = $manager->source();
         $repository->deleteVersionFile();
+
+        Http::fake([
+            'github.com/*' => $this->getResponse200Type('tag'),
+        ]);
 
         $this->assertFalse($repository->isNewVersionAvailable('2.7'));
         $this->assertTrue($repository->isNewVersionAvailable('1.1'));

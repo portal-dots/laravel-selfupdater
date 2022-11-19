@@ -1,26 +1,20 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Codedge\Updater\Events;
 
 use Codedge\Updater\Models\Release;
 
 class UpdateSucceeded
 {
-    /**
-     * @var Release
-     */
-    protected $release;
+    protected Release $release;
 
     public function __construct(Release $release)
     {
         $this->release = $release;
     }
 
-    /**
-     * Get the new version.
-     *
-     * @return string
-     */
     public function getVersionUpdatedTo(): ?string
     {
         return $this->release->getVersion();

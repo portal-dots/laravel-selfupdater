@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Codedge\Updater;
 
 use Codedge\Updater\Contracts\SourceRepositoryTypeContract;
@@ -7,6 +9,7 @@ use Codedge\Updater\Models\Release;
 use Codedge\Updater\Models\UpdateExecutor;
 use Codedge\Updater\Traits\SupportPrivateAccessToken;
 use Codedge\Updater\Traits\UseVersionFile;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Artisan;
 
 /**
@@ -17,23 +20,12 @@ use Illuminate\Support\Facades\Artisan;
  */
 final class SourceRepository implements SourceRepositoryTypeContract
 {
-    use UseVersionFile, SupportPrivateAccessToken;
+    use UseVersionFile;
+    use SupportPrivateAccessToken;
 
-    /**
-     * @var SourceRepositoryTypeContract
-     */
-    protected $sourceRepository;
+    protected SourceRepositoryTypeContract $sourceRepository;
+    protected UpdateExecutor $updateExecutor;
 
-    /**
-     * @var UpdateExecutor
-     */
-    protected $updateExecutor;
-
-    /**
-     * SourceRepository constructor.
-     *
-     * @param  SourceRepositoryTypeContract  $sourceRepository
-     */
     public function __construct(SourceRepositoryTypeContract $sourceRepository, UpdateExecutor $updateExecutor)
     {
         $this->sourceRepository = $sourceRepository;
@@ -42,11 +34,8 @@ final class SourceRepository implements SourceRepositoryTypeContract
 
     /**
      * Fetches the latest version. If you do not want the latest version, specify one and pass it.
-     *
-     * @param  string  $version
-     * @return Release
      */
-    public function fetch($version = ''): Release
+    public function fetch(string $version = ''): Release
     {
         $version = $version ?: $this->getVersionAvailable();
 
@@ -54,9 +43,6 @@ final class SourceRepository implements SourceRepositoryTypeContract
     }
 
     /**
-     * @param  Release  $release
-     * @return bool
-     *
      * @throws \Exception
      */
     public function update(Release $release): bool
@@ -64,39 +50,37 @@ final class SourceRepository implements SourceRepositoryTypeContract
         return $this->updateExecutor->run($release);
     }
 
+    public function getReleases(): Response
+    {
+        return $this->sourceRepository->getReleases();
+    }
+
     /**
      * Check repository if a newer version than the installed one is available.
-     *
-     * @param  string  $currentVersion
-     * @return bool
      */
-    public function isNewVersionAvailable($currentVersion = ''): bool
+    public function isNewVersionAvailable(string $currentVersion = ''): bool
     {
         return $this->sourceRepository->isNewVersionAvailable($currentVersion);
     }
 
-    /**
-     * Get the version that is currenly installed.
+    /*
+     * Get the version that is currently installed.
      * Example: 1.1.0 or v1.1.0 or "1.1.0 version".
      *
-     * @param  string  $prepend
-     * @param  string  $append
-     * @return string
      */
-    public function getVersionInstalled($prepend = '', $append = ''): string
+    public function getVersionInstalled(string $prepend = '', string $append = ''): string
     {
-        return $this->sourceRepository->getVersionInstalled($prepend, $append);
+        return $this->sourceRepository->getVersionInstalled($prepend, $append); //@phpstan-ignore-line
     }
 
     /**
      * Get the latest version that has been published in a certain repository.
      * Example: 2.6.5 or v2.6.5.
      *
-     * @param  string  $prepend  Prepend a string to the latest version
-     * @param  string  $append  Append a string to the latest version
-     * @return string
+     * @param string $prepend Prepend a string to the latest version
+     * @param string $append  Append a string to the latest version
      */
-    public function getVersionAvailable($prepend = '', $append = ''): string
+    public function getVersionAvailable(string $prepend = '', string $append = ''): string
     {
         return $this->sourceRepository->getVersionAvailable($prepend, $append);
     }

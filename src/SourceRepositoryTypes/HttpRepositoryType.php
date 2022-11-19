@@ -6,63 +6,36 @@ namespace Codedge\Updater\SourceRepositoryTypes;
 
 use Codedge\Updater\Contracts\SourceRepositoryTypeContract;
 use Codedge\Updater\Events\UpdateAvailable;
+use Codedge\Updater\Exceptions\ReleaseException;
+use Codedge\Updater\Exceptions\VersionException;
 use Codedge\Updater\Models\Release;
 use Codedge\Updater\Models\UpdateExecutor;
-use Codedge\Updater\Traits\SupportPrivateAccessToken;
 use Codedge\Updater\Traits\UseVersionFile;
 use Exception;
 use GuzzleHttp\ClientInterface;
+use GuzzleHttp\Exception\GuzzleException;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
-use Psr\Http\Message\ResponseInterface;
+use League\Uri\Uri;
 
 class HttpRepositoryType implements SourceRepositoryTypeContract
 {
-    use UseVersionFile, SupportPrivateAccessToken;
+    use UseVersionFile;
 
-    /**
-     * @var ClientInterface
-     */
-    protected $client;
+    protected ClientInterface $client;
+    protected array $config;
+    protected Release $release;
+    protected string $prepend;
+    protected string $append;
+    protected UpdateExecutor $updateExecutor;
 
-    /**
-     * @var array
-     */
-    protected $config;
-
-    /**
-     * @var Release
-     */
-    protected $release;
-
-    /**
-     * @var string prepend string
-     */
-    protected $prepend;
-
-    /**
-     * @var string append string
-     */
-    protected $append;
-
-    /**
-     * @var UpdateExecutor
-     */
-    protected $updateExecutor;
-
-    /**
-     * Github constructor.
-     *
-     * @param array $config
-     * @param ClientInterface $client
-     * @param UpdateExecutor $updateExecutor
-     */
-    public function __construct(array $config, ClientInterface $client, UpdateExecutor $updateExecutor)
+    public function __construct(UpdateExecutor $updateExecutor)
     {
-        $this->client = $client;
-        $this->config = $config;
+        $this->config = config('self-update.repository_types.http');
 
         // Get prepend and append strings
         $this->prepend = preg_replace('/_VERSION_.*$/', '', $this->config['pkg_filename_format']);
@@ -71,7 +44,7 @@ class HttpRepositoryType implements SourceRepositoryTypeContract
         $this->release = resolve(Release::class);
         $this->release->setStoragePath(Str::finish($this->config['download_path'], DIRECTORY_SEPARATOR))
                       ->setUpdatePath(base_path(), config('self-update.exclude_folders'))
-                      ->setAccessToken($config['private_access_token']);
+                      ->setAccessToken($this->config['private_access_token']);
 
         $this->updateExecutor = $updateExecutor;
     }
@@ -79,25 +52,23 @@ class HttpRepositoryType implements SourceRepositoryTypeContract
     /**
      * Check repository if a newer version than the installed one is available.
      *
-     * @param string $currentVersion
-     *
      * @throws InvalidArgumentException
      * @throws Exception
      *
      * @return bool
      */
-    public function isNewVersionAvailable($currentVersion = ''): bool
+    public function isNewVersionAvailable(string $currentVersion = ''): bool
     {
         $version = $currentVersion ?: $this->getVersionInstalled();
 
-        if (! $version) {
-            throw new InvalidArgumentException('No currently installed version specified.');
+        if (!$version) {
+            throw VersionException::versionInstalledNotFound();
         }
 
         $versionAvailable = $this->getVersionAvailable();
 
         if (version_compare($version, $versionAvailable, '<')) {
-            if (! $this->versionFileExists()) {
+            if (!$this->versionFileExists()) {
                 $this->setVersionFile($this->getVersionAvailable());
                 event(new UpdateAvailable($this->getVersionAvailable()));
             }
@@ -111,19 +82,15 @@ class HttpRepositoryType implements SourceRepositoryTypeContract
     /**
      * Fetches the latest version. If you do not want the latest version, specify one and pass it.
      *
-     * @param string $version
-     *
-     * @throws Exception
-     *
-     * @return Release
+     * @throws ReleaseException
      */
-    public function fetch($version = ''): Release
+    public function fetch(string $version = ''): Release
     {
-        $response = $this->getRepositoryReleases();
-        $releaseCollection = $this->extractFromHtml($response->getBody()->getContents());
+        $response = $this->getReleases();
+        $releaseCollection = $this->extractFromHtml($response->body());
 
         if ($releaseCollection->isEmpty()) {
-            throw new Exception('Cannot find a release to update. Please check the repository you\'re pulling from');
+            throw ReleaseException::noReleaseFound($version);
         }
 
         $release = $this->selectRelease($releaseCollection, $version);
@@ -133,25 +100,19 @@ class HttpRepositoryType implements SourceRepositoryTypeContract
                       ->updateStoragePath()
                       ->setDownloadUrl($release->zipball_url);
 
-        if (! $this->release->isSourceAlreadyFetched()) {
-            $this->release->download($this->client);
+        if (!$this->release->isSourceAlreadyFetched()) {
+            $this->release->download();
             $this->release->extract();
         }
 
         return $this->release;
     }
 
-    /**
-     * @param Collection $collection
-     * @param string $version
-     *
-     * @return mixed
-     */
     public function selectRelease(Collection $collection, string $version)
     {
         $release = $collection->first();
 
-        if (! empty($version)) {
+        if (!empty($version)) {
             if ($collection->contains('name', $version)) {
                 $release = $collection->where('name', $version)->first();
             } else {
@@ -163,9 +124,6 @@ class HttpRepositoryType implements SourceRepositoryTypeContract
     }
 
     /**
-     * @param Release $release
-     *
-     * @return bool
      * @throws Exception
      */
     public function update(Release $release): bool
@@ -186,32 +144,27 @@ class HttpRepositoryType implements SourceRepositoryTypeContract
      * Example: 2.6.5 or v2.6.5.
      *
      * @param string $prepend Prepend a string to the latest version
-     * @param string $append Append a string to the latest version
+     * @param string $append  Append a string to the latest version
      *
-     * @return string
-     * @throws Exception
+     * @throws Exception|GuzzleException
      */
-    public function getVersionAvailable($prepend = '', $append = ''): string
+    public function getVersionAvailable(string $prepend = '', string $append = ''): string
     {
         if ($this->versionFileExists()) {
             $version = $this->getVersionFile();
         } else {
-            $releaseCollection = $this->extractFromHtml($this->getRepositoryReleases()->getBody()->getContents());
+            $releaseCollection = $this->extractFromHtml($this->getReleases()->body());
             $version = $releaseCollection->first()->name;
         }
 
         return $version;
     }
 
-    /**
-     * Retrieve html body with list of all releases from archive URL.
-     *
-     * @return ResponseInterface
-     * @throws Exception
-     */
-    protected function getRepositoryReleases(): ResponseInterface
+    final public function getReleases(): Response
     {
-        if (empty($this->config['repository_url'])) {
+        $repositoryUrl = $this->config['repository_url'];
+
+        if (empty($repositoryUrl)) {
             throw new Exception('No repository specified. Please enter a valid URL in your config.');
         }
 
@@ -219,34 +172,48 @@ class HttpRepositoryType implements SourceRepositoryTypeContract
 
         if ($this->release->hasAccessToken()) {
             $headers = [
-                'Authorization' => $this->getAccessToken(),
+                'Authorization' => $this->release->getAccessToken(),
             ];
         }
 
-        return $this->client->request('GET', $this->config['repository_url'], ['headers' => $headers]);
+        return Http::withHeaders($headers)->get($repositoryUrl);
     }
 
-    private function extractFromHtml(string $content): Collection
+    /**
+     * @throws ReleaseException
+     */
+    public function extractFromHtml(string $content): Collection
     {
-        $format = str_replace(
-            '_VERSION_',
-            '(\d+\.\d+\.\d+)',
-            str_replace('.', '\.', $this->config['pkg_filename_format'])
-        ).'.zip';
-        $linkPattern = '<a.*href="(.*'.$format.')"';
+        $format = str_replace('_VERSION_', '(\d+\.\d+\.\d+)', $this->config['pkg_filename_format']).'.zip';
+        $linkPattern = 'a.*href="(.*'.$format.')"';
 
-        preg_match_all('/'.$linkPattern.'/i', $content, $files);
-        $releaseVersions = $files[2];
+        preg_match_all('<'.$linkPattern.'>i', $content, $files);
+        $files = array_filter($files);
 
-        $releases = collect($files[1])->map(function ($item, $key) use ($releaseVersions) {
-            $zipball_url = str_replace(
-                '_VERSION_',
-                $releaseVersions[$key],
-                $this->config['pkg_url_format']
-            );
+        if (count($files) === 0) {
+            throw ReleaseException::cannotExtractDownloadLink($format);
+        }
+
+        // Special handling when file version cannot be properly detected
+        if (!array_key_exists(2, $files)) {
+            foreach ($files[1] as $key=>$val) {
+                preg_match('/[a-zA-Z\-]([.\d]*)(?=\.\w+$)/', $val, $versions);
+                $files[][$key] = $versions[1];
+            }
+        }
+
+        $releaseVersions = array_combine($files[2], $files[1]);
+
+        $uri = Uri::createFromString($this->config['repository_url']);
+        $baseUrl = $uri->getScheme().'://'.$uri->getHost();
+
+        $releases = collect($releaseVersions)->map(function ($item, $key) use ($baseUrl) {
+            $uri = Uri::createFromString($item);
+            $item = $uri->getHost() ? $item : $baseUrl.Str::start($item, '/');
+
             return (object) [
-                'name' => $releaseVersions[$key],
-                'zipball_url' => $zipball_url,
+                'name'        => $key,
+                'zipball_url' => $item,
             ];
         });
 

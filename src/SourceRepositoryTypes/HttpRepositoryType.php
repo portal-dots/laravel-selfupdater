@@ -54,8 +54,6 @@ class HttpRepositoryType implements SourceRepositoryTypeContract
      *
      * @throws InvalidArgumentException
      * @throws Exception
-     *
-     * @return bool
      */
     public function isNewVersionAvailable(string $currentVersion = ''): bool
     {
